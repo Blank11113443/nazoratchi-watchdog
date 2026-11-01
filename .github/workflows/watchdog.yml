@@ -1,0 +1,43 @@
+name: watchdog
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  health:
+    if: github.event.schedule != '0 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Nazoratchi health
+        env:
+          HEALTH_URL: ${{ secrets.HEALTH_URL }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.OWNER_TELEGRAM_ID }}
+        run: |
+          code=000
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$HEALTH_URL" || echo 000)
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 30
+          done
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            --data-urlencode text="🚨 Nazoratchi javob bermayapti (health: ${code}). Railway'da tekshiring." > /dev/null
+          exit 1
+
+  keepalive:
+    # GitHub disables schedules in repos without activity for 60 days; re-enabling resets that.
+    if: github.event.schedule == '0 3 1 * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep the schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/watchdog.yml/enable"
