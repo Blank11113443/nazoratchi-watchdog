@@ -1,4 +1,5 @@
 name: watchdog
+# Runs on GitHub, independent of Railway and the owner's Mac.
 
 on:
   schedule:
